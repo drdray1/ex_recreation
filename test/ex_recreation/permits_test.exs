@@ -69,6 +69,22 @@ defmodule ExRecreation.PermitsTest do
       assert {:ok, %{}} = Permits.division_names(Fixtures.client(@stub), "251864")
     end
 
+    test "skips entries that are not division objects" do
+      # Pointed at the wrong endpoint you get a payload of scalars and nested
+      # maps; label extraction should degrade rather than raise.
+      Req.Test.stub(@stub, fn conn ->
+        Req.Test.json(conn, %{
+          "payload" => %{
+            "permit_id" => "251864",
+            "772" => %{"name" => "East Entrance"}
+          }
+        })
+      end)
+
+      assert {:ok, %{"772" => "East Entrance"}} =
+               Permits.division_names(Fixtures.client(@stub), "251864")
+    end
+
     test "propagates errors" do
       Req.Test.stub(@stub, fn conn -> Plug.Conn.send_resp(conn, 404, "") end)
 

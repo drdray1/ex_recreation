@@ -80,13 +80,20 @@ defmodule ExRecreation.Permits do
   Fetches the permit's divisions and reduces them to an id → name map.
 
   Returns `{:ok, %{"772" => "East Entrance", "773" => "West Entrance"}}`.
+
+  Entries whose value isn't a division object are skipped rather than raising —
+  this feeds UI labels, and an unexpected payload shape should degrade to bare
+  division ids, not take the page down with it.
   """
   @spec division_names(Client.t(), String.t()) ::
           {:ok, %{optional(String.t()) => String.t()}} | {:error, term()}
   def division_names(%Client{} = client, permit_id) do
     case list_divisions(client, permit_id) do
       {:ok, divisions} when is_map(divisions) ->
-        {:ok, Map.new(divisions, fn {id, division} -> {id, division["name"] || id} end)}
+        {:ok,
+         divisions
+         |> Enum.filter(fn {_id, division} -> is_map(division) end)
+         |> Map.new(fn {id, division} -> {id, division["name"] || id} end)}
 
       {:ok, _other} ->
         {:ok, %{}}
