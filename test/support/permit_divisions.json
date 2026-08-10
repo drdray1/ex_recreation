@@ -1,0 +1,18 @@
+{
+  "payload": {
+    "772": {
+      "code": "",
+      "district": "",
+      "id": "772",
+      "name": "East Entrance",
+      "type": "Entrance"
+    },
+    "773": {
+      "code": "",
+      "district": "",
+      "id": "773",
+      "name": "West Entrance",
+      "type": "Entrance"
+    }
+  }
+}

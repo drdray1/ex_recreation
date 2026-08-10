@@ -1,0 +1,20 @@
+{
+  "query": "Aravaipa",
+  "results": [
+    {
+      "city": "Safford",
+      "entity_id": "251864",
+      "entity_type": "permit",
+      "name": "Aravaipa Canyon Wilderness Permits",
+      "state_code": "Arizona"
+    },
+    {
+      "city": "Safford",
+      "entity_id": "233400",
+      "entity_type": "campground",
+      "name": "UPPER ARCADIA",
+      "state_code": "Arizona"
+    }
+  ],
+  "total": 560
+}
