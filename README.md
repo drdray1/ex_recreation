@@ -5,7 +5,8 @@ campground availability, plus the trip-planning predicates you actually want to
 ask of it.
 
 These are the same endpoints recreation.gov's own front-end calls. They are
-served unauthenticated: no API key, no session, not even a `User-Agent`.
+served unauthenticated: no API key, no session, not even a `User-Agent` is
+required.
 
 Recreation.gov does publish an official key'd API — [RIDB](https://ridb.recreation.gov) —
 but it only serves static metadata (facilities, descriptions, coordinates). It
@@ -17,7 +18,7 @@ not used here.
 ```elixir
 def deps do
   [
-    {:ex_recreation, git: "https://github.com/drdray1/ex_recreation.git", tag: "0.1.0"}
+    {:ex_recreation, git: "https://github.com/drdray1/ex_recreation.git", tag: "0.2.0"}
   ]
 end
 ```
@@ -124,6 +125,7 @@ Every call returns `{:ok, term}` or `{:error, reason}`:
 
 | Reason | Meaning |
 |---|---|
+| `:unauthorized` | 401 — the session is gone, or was never accepted |
 | `:not_found` | 404 — bad permit id |
 | `:forbidden` | 403 |
 | `:rate_limited` | 429 |
@@ -143,12 +145,36 @@ mix recreation.check --permit 251864 --from 2026-11-12 --to 2026-11-14 --spots 1
 Prints the day grid, whether the range is covered, the open runs, and when the
 first date entered the booking window.
 
+## Sessions
+
+No credentials are required, but a session is accepted. `authenticate/2` hangs a
+cookie jar and a bearer token on a client, and every subsequent call carries them
+as a `Cookie` header and an `Authorization: Bearer` header:
+
+```elixir
+client =
+  ExRecreation.new()
+  |> ExRecreation.authenticate(cookies: %{"sid" => "..."}, access_token: "...")
+
+ExRecreation.authenticated?(client)
+#=> true
+```
+
+`authenticate/2` only overwrites what you pass, so a token can be refreshed
+without disturbing the jar. `:unauthorized` and `:forbidden` are the two errors
+that mean "get a new session".
+
+**This library does not establish a session.** It has no login flow and drives no
+browser — it only accepts one obtained elsewhere. That belongs in the calling
+application, which is also where the credentials belong.
+
 ## Booking
 
 This library reads. It does not book — recreation.gov's terms prohibit automated
 reservations, and checkout is CAPTCHA-gated. `booking_url/2` builds a deep link
 that lands a human on the availability grid with the right date selected, and
-that is the intended end of the automated path.
+that is the intended end of the automated path. Supplying a session does not
+change this: it makes account-scoped reads possible, not checkout.
 
 ## Testing
 

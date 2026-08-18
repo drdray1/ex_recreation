@@ -4,9 +4,14 @@ defmodule ExRecreation do
   and campground availability.
 
   These are the same endpoints recreation.gov's own front-end calls. They are
-  served unauthenticated: no API key, no session, not even a `User-Agent`. (The
-  *official* key'd API, RIDB, only serves static metadata and has no live
-  availability, so it is not used here.)
+  served unauthenticated: no API key, no session, not even a `User-Agent` is
+  required. (The *official* key'd API, RIDB, only serves static metadata and has
+  no live availability, so it is not used here.)
+
+  A session is optional but supported: `authenticate/2` attaches cookies and a
+  bearer token to a client, and every call then carries them. This library never
+  establishes one — it has no login flow and drives no browser. See
+  `ExRecreation.Client` for what that is and is not for.
 
   ## Usage
 
@@ -59,20 +64,25 @@ defmodule ExRecreation do
   ## Errors
 
   Every call returns `{:ok, term}` or `{:error, reason}`, where `reason` is one
-  of `:not_found`, `:forbidden`, `:rate_limited`, `{:unexpected_status, status}`,
-  or `{:connection_error, reason}`.
+  of `:unauthorized`, `:not_found`, `:forbidden`, `:rate_limited`,
+  `{:unexpected_status, status}`, or `{:connection_error, reason}`. A caller
+  holding a session should read `:unauthorized` and `:forbidden` as "the session
+  is gone, get a new one".
 
   ## A note on booking
 
   This library reads. It does not book — recreation.gov's terms prohibit
   automated reservations and checkout is CAPTCHA-gated. `booking_url/2` gets a
   human to the right page with the right date selected, and that is the intended
-  end of the automated path.
+  end of the automated path. Supplying a session does not change that: it makes
+  account-scoped reads possible, not checkout.
   """
 
   alias ExRecreation.{Availability, Client, Permits, Search, Trips}
 
   defdelegate new(opts \\ []), to: Client
+  defdelegate authenticate(client, opts), to: Client
+  defdelegate authenticated?(client), to: Client
 
   defdelegate month(client, permit_id, date), to: Availability
   defdelegate range(client, permit_id, date_range, opts \\ []), to: Availability

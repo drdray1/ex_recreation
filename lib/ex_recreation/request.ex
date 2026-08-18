@@ -3,10 +3,10 @@ defmodule ExRecreation.Request do
   Low-level HTTP for an `ExRecreation.Client`.
 
   Every request hits the client's `base_url`, carries a browser-ish
-  `User-Agent`, and is normalized to `{:ok, payload}` / `{:error, reason}` by
-  `handle_response/1`. Transient errors and `429`s are retried with exponential
-  backoff in the real client and disabled under a test plug so stubbed responses
-  return deterministically.
+  `User-Agent` plus whatever session the client holds, and is normalized to
+  `{:ok, payload}` / `{:error, reason}` by `handle_response/1`. Transient errors
+  and `429`s are retried with exponential backoff in the real client and
+  disabled under a test plug so stubbed responses return deterministically.
 
   Recreation.gov wraps every successful body in a `"payload"` envelope;
   `handle_response/1` unwraps it so callers never see it.
@@ -66,6 +66,10 @@ defmodule ExRecreation.Request do
   Successful bodies come wrapped as `%{"payload" => ...}` and are unwrapped.
   Anything else 2xx is returned as-is, which covers `/api/search` — the one
   endpoint that returns a bare top-level object with no envelope.
+
+  `401` and `403` are the two a caller holding a session should watch for: they
+  mean the session is gone or was never accepted, and are the signal to
+  re-establish one.
   """
   @spec handle_response({:ok, Req.Response.t()} | {:error, term()}) :: response()
   def handle_response({:ok, %Req.Response{status: status, body: %{"payload" => payload}}})
@@ -76,6 +80,7 @@ defmodule ExRecreation.Request do
       when status in 200..299,
       do: {:ok, body}
 
+  def handle_response({:ok, %Req.Response{status: 401}}), do: {:error, :unauthorized}
   def handle_response({:ok, %Req.Response{status: 403}}), do: {:error, :forbidden}
   def handle_response({:ok, %Req.Response{status: 404}}), do: {:error, :not_found}
   def handle_response({:ok, %Req.Response{status: 429}}), do: {:error, :rate_limited}
@@ -87,11 +92,27 @@ defmodule ExRecreation.Request do
 
   # --- Headers ----------------------------------------------------------------
 
-  defp headers(%Client{user_agent: user_agent}) do
+  defp headers(%Client{} = client) do
     [
-      {"user-agent", user_agent},
+      {"user-agent", client.user_agent},
       {"accept", "application/json"}
     ]
+    |> maybe_cookie(client.cookies)
+    |> maybe_bearer(client.access_token)
+  end
+
+  # Req has no persistent cookie store, so a session's jar is serialized into a
+  # single `Cookie` header on every request. Same shape as `ExLds.Client`.
+  defp maybe_cookie(headers, cookies) when map_size(cookies) == 0, do: headers
+
+  defp maybe_cookie(headers, cookies) do
+    headers ++ [{"cookie", Enum.map_join(cookies, "; ", fn {k, v} -> "#{k}=#{v}" end)}]
+  end
+
+  defp maybe_bearer(headers, nil), do: headers
+
+  defp maybe_bearer(headers, token) do
+    headers ++ [{"authorization", "Bearer #{token}"}]
   end
 
   # Retry transient errors / 429s in the real client; disable under a test plug

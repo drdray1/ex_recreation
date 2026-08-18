@@ -40,6 +40,61 @@ defmodule ExRecreation.RequestTest do
       assert {:ok, %{}} = Request.request(client, :get, "/thing")
     end
 
+    test "sends no cookie or authorization header without a session" do
+      Req.Test.stub(@stub, fn conn ->
+        assert Plug.Conn.get_req_header(conn, "cookie") == []
+        assert Plug.Conn.get_req_header(conn, "authorization") == []
+        Req.Test.json(conn, %{"payload" => %{}})
+      end)
+
+      assert {:ok, %{}} = Request.request(Fixtures.client(@stub), :get, "/thing")
+    end
+
+    test "serializes a session's cookie jar into a single cookie header" do
+      Req.Test.stub(@stub, fn conn ->
+        assert [cookie] = Plug.Conn.get_req_header(conn, "cookie")
+        assert cookie |> String.split("; ") |> Enum.sort() == ["other=2", "sid=abc"]
+        Req.Test.json(conn, %{"payload" => %{}})
+      end)
+
+      client =
+        @stub
+        |> Fixtures.client()
+        |> ExRecreation.authenticate(cookies: %{"sid" => "abc", "other" => "2"})
+
+      assert {:ok, %{}} = Request.request(client, :get, "/thing")
+    end
+
+    test "sends an access token as a bearer authorization header" do
+      Req.Test.stub(@stub, fn conn ->
+        assert Plug.Conn.get_req_header(conn, "authorization") == ["Bearer jwt-xyz"]
+        assert Plug.Conn.get_req_header(conn, "cookie") == []
+        Req.Test.json(conn, %{"payload" => %{}})
+      end)
+
+      client = @stub |> Fixtures.client() |> ExRecreation.authenticate(access_token: "jwt-xyz")
+
+      assert {:ok, %{}} = Request.request(client, :get, "/thing")
+    end
+
+    test "sends both when the session has both, alongside the usual headers" do
+      Req.Test.stub(@stub, fn conn ->
+        assert Plug.Conn.get_req_header(conn, "cookie") == ["sid=abc"]
+        assert Plug.Conn.get_req_header(conn, "authorization") == ["Bearer jwt-xyz"]
+        assert [user_agent] = Plug.Conn.get_req_header(conn, "user-agent")
+        assert user_agent =~ "Mozilla/5.0"
+        assert Plug.Conn.get_req_header(conn, "accept") == ["application/json"]
+        Req.Test.json(conn, %{"payload" => %{}})
+      end)
+
+      client =
+        @stub
+        |> Fixtures.client()
+        |> ExRecreation.authenticate(cookies: %{"sid" => "abc"}, access_token: "jwt-xyz")
+
+      assert {:ok, %{}} = Request.request(client, :get, "/thing")
+    end
+
     test "sends a json body when given one" do
       Req.Test.stub(@stub, fn conn ->
         {:ok, body, _conn} = Plug.Conn.read_body(conn)
@@ -104,7 +159,12 @@ defmodule ExRecreation.RequestTest do
     end
 
     test "maps error statuses to reason atoms" do
-      for {status, reason} <- [{403, :forbidden}, {404, :not_found}, {429, :rate_limited}] do
+      for {status, reason} <- [
+            {401, :unauthorized},
+            {403, :forbidden},
+            {404, :not_found},
+            {429, :rate_limited}
+          ] do
         assert {:error, ^reason} =
                  Request.handle_response({:ok, %Req.Response{status: status, body: ""}})
       end
