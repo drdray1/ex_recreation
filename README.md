@@ -18,7 +18,7 @@ not used here.
 ```elixir
 def deps do
   [
-    {:ex_recreation, git: "https://github.com/drdray1/ex_recreation.git", tag: "0.2.0"}
+    {:ex_recreation, git: "https://github.com/drdray1/ex_recreation.git", tag: "0.2.1"}
   ]
 end
 ```
